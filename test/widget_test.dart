@@ -1,30 +1,41 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:myportofolio_mobile/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  testWidgets('MyPortfolio homepage displays profile info and action buttons',
+      (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // Verifikasi 3 InfoCard identitas pemilik portofolio.
+    expect(find.text('NPM'), findsOneWidget);
+    expect(find.text('2506624266'), findsOneWidget);
+    expect(find.text('Name'), findsOneWidget);
+    expect(find.text('Ahsan Rifqi Prasetyo'), findsOneWidget);
+    expect(find.text('Class'), findsOneWidget);
+    expect(find.text('PBP F'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+    // Verifikasi 7 tombol aksi ItemCard.
+    const List<String> buttonNames = [
+      'Lihat Proyek',
+      'Tambah Proyek',
+      'Lihat Education',
+      'Tambah Education',
+      'Lihat Skills',
+      'Tambah Skills',
+      'Logout',
+    ];
+
+    for (final String name in buttonNames) {
+      expect(find.text(name), findsOneWidget);
+    }
+
+    // Verifikasi SnackBar muncul saat tombol ditekan.
+    await tester.tap(find.text('Lihat Education'));
     await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(
+      find.text('Kamu telah menekan tombol Lihat Education!'),
+      findsOneWidget,
+    );
   });
 }
+
