@@ -8,8 +8,12 @@ class MyHomePage extends StatelessWidget {
   final String kelas = "PBP F";
 
   final List<ItemHomepage> items = [
-    ItemHomepage("Lihat Proyek", Icons.folder, Colors.blue),
-    ItemHomepage("Tambah Proyek", Icons.add_circle, Colors.green),
+    ItemHomepage("Lihat Proyek", Icons.folder_special, Colors.blue),
+    ItemHomepage("Tambah Proyek", Icons.create_new_folder, Colors.green),
+    ItemHomepage("Lihat Education", Icons.school, Colors.indigo),
+    ItemHomepage("Tambah Education", Icons.library_add, Colors.teal),
+    ItemHomepage("Lihat Skills", Icons.workspace_premium, Colors.deepPurple),
+    ItemHomepage("Tambah Skills", Icons.add_task, Colors.orange.shade800),
     ItemHomepage("Logout", Icons.logout, Colors.red),
   ];
 
