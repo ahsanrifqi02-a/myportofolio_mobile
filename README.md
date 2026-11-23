@@ -31,6 +31,20 @@ Aplikasi mobile berbasis **Flutter** untuk menampilkan dan mengelola portofolio 
    ```bash
    flutter run
    ```
+   Untuk menguji pada browser Chrome:
+   ```bash
+   flutter run -d chrome
+   ```
+
+---
+
+## Progres Mingguan
+
+| Minggu | Tonggak Pencapaian | Ringkasan Fitur |
+| :--- | :--- | :--- |
+| **Tutorial 08 & Tugas 7** | Dasar Flutter & Tata Letak | Inisialisasi proyek Flutter, `MyHomePage`, 3 `InfoCard` identitas pemilik portofolio, serta 7 `ItemCard` berwarna unik dengan umpan balik `SnackBar`. |
+| **Tutorial 09** | Navigasi, Drawer, & Form Proyek | Pemisahan struktur ke `lib/screens/` dan `lib/widgets/`, pembuatan `LeftDrawer` (`Home`, `Add Project`), serta `ProjectFormPage` lengkap dengan validasi dan `AlertDialog`. |
+| **Tugas 8** | Form Experience, Date Picker, & Validasi Modular | Pembuatan `ExperienceFormPage` (`lib/screens/experience_form.dart`), pemisahan validator ke `lib/utils/experience_validators.dart`, penambahan kartu `Tambah Experience` dan opsi `Add Experience` di `LeftDrawer`, penyelarasan tema global, perbaikan *overflow* layar ponsel, serta *unit* & *widget tests*. |
 
 ---
 
@@ -111,8 +125,51 @@ Aplikasi mobile berbasis **Flutter** untuk menampilkan dan mengelola portofolio 
 
 ---
 
+### Tugas 8
+
+1. **Perbedaan `Navigator.push()`, `Navigator.pushReplacement()`, dan `Navigator.pop()`, metode untuk membuka formulir dari kartu aksi, serta alur opsi *Home* di *drawer*:**
+
+   | Metode | Efek pada *Navigation Stack* | Pengaruh pada Tombol Kembali (*Back*) | Penggunaan pada Proyek |
+   | :--- | :--- | :--- | :--- |
+   | `Navigator.push()` | Menambahkan (*push*) *route* halaman baru ke puncak *stack* tanpa menghapus halaman sebelumnya. | Pengguna dapat menekan tombol *back* bawaan perangkat/browser untuk kembali ke halaman sebelumnya. | Membuka `ProjectFormPage` dan `ExperienceFormPage` dari `ItemCard` (`Tambah Proyek`, `Tambah Experience`) di `lib/widgets/project_card.dart`. |
+   | `Navigator.pushReplacement()` | Mengganti (*replace*) *route* teratas saat ini dengan *route* baru sehingga halaman lama dihapus dari *stack*. | Halaman sebelumnya tidak lagi berada di bawah halaman baru pada *stack*, mencegah penumpukan *stack* tak terbatas saat berpindah menu. | Perpindahan menu utama di `LeftDrawer` (`Home`, `Add Project`, `Add Experience`) pada `lib/widgets/left_drawer.dart`. |
+   | `Navigator.pop()` | Menghapus (*pop*) *route* teratas dari *stack* dan mengembalikan pengguna ke *route* tepat di bawahnya. | Sama seperti aksi tombol kembali; juga dipakai untuk menutup *overlay* seperti `AlertDialog`. | Menutup `AlertDialog` ringkasan isian saat tombol `OK` ditekan pada `ExperienceFormPage` dan `ProjectFormPage`. |
+
+   - **Metode dari kartu aksi:** Kartu `Tambah Experience` pada `MyHomePage` menggunakan **`Navigator.push()`** agar `ExperienceFormPage` ditumpuk di atas `MyHomePage`, sehingga pengguna dapat kembali ke halaman utama memakai tombol *back* bawaan perangkat.
+   - **Cara kerja opsi *Home* di *drawer*:** Ketika pengguna mengetuk `Home` di `LeftDrawer`, aplikasi memanggil `Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => MyHomePage()))`. Rute formulir aktif digantikan langsung oleh `MyHomePage`, sehingga pengguna kembali ke halaman utama dengan bersih tanpa menumpuk riwayat navigasi (sangat berguna saat menguji alur kembali di Chrome).
+
+2. **Peran susunan `Scaffold`, `AppBar`, dan `Drawer` dalam menjaga konsistensi halaman, serta contoh penggunaan warna tema portofolio di lebih dari satu halaman:**
+
+   - **`Scaffold`** menyediakan kerangka tata letak standar Material Design (`appBar`, `drawer`, `body`, dukungan `SnackBar`) pada setiap halaman sehingga posisi bilah judul, ikon menu *drawer*, dan area konten selalu konsisten.
+   - **`AppBar`** menjaga identitas visual bagian atas halaman (judul halaman, warna latar, serta tombol hamburger *drawer* atau tombol kembali) tetap seragam.
+   - **`Drawer` (`const LeftDrawer()`)** digunakan ulang sebagai komponen tunggal yang sama pada `MyHomePage`, `ProjectFormPage`, dan `ExperienceFormPage`. Dengan demikian, setiap perubahan menu navigasi langsung tercermin seragam di seluruh halaman tanpa duplikasi kode.
+   - **Contoh penggunaan warna tema portofolio di lebih dari satu halaman:** Warna primer `Theme.of(context).colorScheme.primary` (yang dikonfigurasi terpusat melalui `ColorScheme.fromSeed(seedColor: Colors.indigo)` di `lib/main.dart`) digunakan secara konsisten pada:
+     - `backgroundColor` dari `AppBar` di `MyHomePage` (`lib/screens/menu.dart`),
+     - `BoxDecoration(color: primaryColor)` pada `DrawerHeader` di `LeftDrawer` (`lib/widgets/left_drawer.dart`), serta
+     - `AppBar` dan tombol `Simpan` / `Save` pada `ExperienceFormPage` (`lib/screens/experience_form.dart`) dan `ProjectFormPage` (`lib/screens/project_form.dart`).
+
+3. **Alasan pemilihan tata letak formulir serta peran *widget* pengatur jarak dan penggulir ketika ruang layar terbatas:**
+
+   - **Mengapa tata letak ini dipilih:** Formulir `ExperienceFormPage` disusun secara vertikal (`Column` dengan `crossAxisAlignment: CrossAxisAlignment.stretch`) di dalam `SafeArea` dan `SingleChildScrollView`. Pola satu kolom vertikal memudahkan pengguna memindai alur input dari atas ke bawah (Judul → Kategori → Deskripsi → Tanggal Mulai → Toggle *Ongoing* → Tanggal Selesai → Tombol Aksi) dan otomatis beradaptasi pada berbagai lebar layar tanpa memotong label atau tombol.
+   - **Peran *widget* pengatur jarak (`Padding`, `SizedBox`):** `Padding(padding: EdgeInsets.all(16.0))` memberi ruang napas di tepi layar agar input tidak menempel ke pinggir perangkat, sementara `SizedBox(height: ...)` dan `SizedBox(width: 12.0)` memisahkan antar-kolom input serta tombol `Reset` dan `Simpan` sehingga setiap elemen tetap nyaman dibaca dan memiliki area sentuh (*tap target*) yang jelas.
+   - **Peran *widget* penggulir (`SingleChildScrollView`):** Saat aplikasi dibuka pada layar sempit (seperti ponsel 390px) atau ketika papan ketik virtual (*soft keyboard*) muncul dan mengambil separuh tinggi layar, `SingleChildScrollView` memungkinkan seluruh konten formulir digulir vertikal sehingga tidak terjadi *RenderFlex overflow* dan tombol **Simpan** tetap dapat dijangkau.
+
+4. **Peran `GlobalKey<FormState>`, `validator`, dan `validate()` saat tombol *Simpan* ditekan, contoh nilai yang ditolak, dan alasan memilih jenis input saja belum cukup:**
+
+   - **`GlobalKey<FormState>` (`_formKey`):** Berfungsi sebagai pengenal unik untuk mengakses objek `FormState` dari dalam *callback* tombol `Simpan` (yang berada di dalam maupun di luar subtree `Form`).
+   - **`validate()`:** Saat tombol `Simpan` ditekan, `_formKey.currentState!.validate()` mengeksekusi seluruh fungsi `validator` milik setiap `TextFormField` dan `FormField<DateTime>` di dalam `Form` secara bersamaan. Jika semua mengembalikan `null`, `validate()` mengembalikan `true` dan `showDialog()` dijalankan; jika ada minimal satu yang mengembalikan pesan *error*, dialog ditahan dan pesan kesalahan ditampilkan tepat di bawah kolom terkait.
+   - **`validator`:** Fungsi per-kolom (dimodularisasi di `lib/utils/experience_validators.dart`) yang memeriksa aturan bisnis model `Experience` dan mengembalikan pesan kesalahan jika tidak valid atau `null` jika valid.
+   - **Contoh nilai yang ditolak oleh validasi:**
+     - Judul atau deskripsi yang hanya berisi spasi (`"   "`) → ditolak karena `value.trim().isEmpty` bernilai `true`.
+     - Judul melebihi 255 karakter (`maxTitleLength = 255`) → ditolak agar sesuai batas `CharField(max_length=255)` pada model Django.
+     - Tanggal selesai lebih awal dari tanggal mulai (misalnya `started_at = 15 Nov 2026` dan `ended_at = 10 Nov 2026` saat toggle *ongoing* nonaktif) → ditolak dengan pesan `"Tanggal selesai tidak boleh sebelum tanggal mulai!"`.
+   - **Mengapa memilih jenis input atau papan ketik saja belum cukup:** Pemilihan widget input atau `TextInputType` hanya membantu kenyamanan pengisian di sisi antarmuka, tetapi tidak menjamin keabsahan aturan domain. Pengguna tetap dapat membiarkan kolom wajib kosong, menempelkan (*paste*) teks spasi kosong atau terlalu panjang, maupun memilih dua tanggal yang masing-masing sah secara format kalender (`DateTime`) namun melanggar logika urutan waktu (`ended_at < started_at`).
+
+---
+
 ## AI Disclosure
 
+### Tugas 7
 - **Tools:** Antigravity (asisten AI berbasis LLM di IDE).
 - **Strategi *Prompting*:** Meminta asisten membaca proyek Tutorial 08 terlebih dahulu, menyusun rencana implementasi bertahap untuk 7 tombol aksi (*Proyek*, *Education*, *Skills*, *Logout*), lalu menerapkan perubahan per langkah agar selaras dengan *Conventional Commits*.
 - **Bagian yang Dibantu AI:**
@@ -120,3 +177,15 @@ Aplikasi mobile berbasis **Flutter** untuk menampilkan dan mengelola portofolio 
   - Penambahan `SingleChildScrollView` untuk mencegah *overflow* dan pembaruan `test/widget_test.dart`.
   - Penyusunan draf penjelasan konsep Flutter pada `README.md`.
 - **Evaluasi & Perbaikan Manual:** Meninjau langsung pilihan ikon dan kontras warna tombol, memverifikasi identitas profil (`NPM`, `Name`, `Class`), memastikan `flutter analyze` (`No issues found!`) dan `flutter test` lulus, serta menyusun dan melakukan *commit* `README.md` secara mandiri sebelum `git push`.
+
+### Tugas 8
+- **Tools:** Antigravity (asisten AI berbasis LLM di IDE).
+- **Strategi *Prompting*:** Menggunakan alur perencanaan (`/plan`) dan sesi klarifikasi keputusan desain satu per satu (`/grill-me`) agar AI terlebih dahulu membaca kode Flutter eksisting dan model Django `myportofolio/main/models.py`, menyepakati pilihan model `Experience`, aturan validasi tanggal & *ongoing*, modularisasi validator, serta *commit roadmap* sebelum menulis kode.
+- **Bagian yang Dibantu AI:**
+  - Pembuatan utilitas validasi & durasi di `lib/utils/experience_validators.dart` serta halaman `ExperienceFormPage` di `lib/screens/experience_form.dart`.
+  - Integrasi navigasi kartu `Tambah Experience` (`Navigator.push()`) dan opsi drawer `Add Experience` (`Navigator.pushReplacement()`).
+  - Penulisan *unit* dan *widget tests* pada `test/widget_test.dart` serta draf jawaban reflektif Tugas 8 di `README.md`.
+- **Analisis Kritis Keterbatasan AI & Perbaikan Manual:**
+  - **Kesadaran versi SDK & API depresiasi:** Tanpa pemeriksaan berkas proyek terlebih dahulu, model AI cenderung menghasilkan impor `package:flutter/material.dart` atau parameter `value:` yang sudah *deprecated* pada `DropdownButtonFormField`; pada proyek ini (Flutter 3.50), seluruh berkas telah diverifikasi memakai `package:material_ui/material_ui.dart` dan `initialValue:` sehingga `flutter analyze` bersih.
+  - **Deteksi *overflow* layar ponsel lewat pengujian nyata:** Meskipun tata letak awal tampak normal di ukuran layar desktop/default, penambahan simulasi *viewport* ponsel (`390×740`) pada `widget_test.dart` mengungkap *RenderFlex overflow* pada `InfoCard` (`0.286 px`) dan `ItemCard` (`13–33 px`) di `MyHomePage`, yang kemudian diperbaiki menggunakan `Expanded` dan `Flexible` hingga seluruh 8 pengujian lulus tanpa *overflow*.
+  - **Verifikasi manual:** Meninjau langsung seluruh alur navigasi, validasi input, `flutter analyze`, `flutter test`, isi jawaban reflektif `README.md`, serta urutan *commit* sebelum `git push` ke GitHub.
