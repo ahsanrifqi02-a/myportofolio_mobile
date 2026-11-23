@@ -18,6 +18,7 @@ class MyHomePage extends StatelessWidget {
     ItemHomepage("Tambah Education", Icons.library_add, Colors.teal),
     ItemHomepage("Lihat Skills", Icons.workspace_premium, Colors.deepPurple),
     ItemHomepage("Tambah Skills", Icons.add_task, Colors.orange.shade800),
+    ItemHomepage("Tambah Experience", Icons.work_outline, Colors.brown),
     ItemHomepage("Logout", Icons.logout, Colors.red),
   ];
 
