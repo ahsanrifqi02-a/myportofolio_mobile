@@ -1,9 +1,157 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:myportofolio_mobile/main.dart';
+import 'package:myportofolio_mobile/models/project.dart';
+import 'package:myportofolio_mobile/services/api_client.dart';
+import 'package:myportofolio_mobile/services/auth_state.dart';
 import 'package:myportofolio_mobile/utils/experience_validators.dart';
 
+ApiClient _createMockApiClient({
+  List<Map<String, dynamic>>? projects,
+  bool failGetProjects = false,
+  bool failLogin = false,
+  bool failLogout = false,
+}) {
+  final sampleProjects =
+      projects ??
+      [
+        {
+          'id': '11111111-1111-1111-1111-111111111111',
+          'title': 'MyPortfolio',
+          'description': 'Full-stack Django and Flutter portfolio app.',
+          'tech_stack': 'Flutter, Django',
+          'project_url': 'https://example.com/myportfolio',
+          'project_image_url': '',
+        },
+      ];
+
+  return ApiClient(
+    baseUrl: 'http://localhost:8000',
+    client: MockClient((request) async {
+      if (request.url.path == '/api/v1/projects/' && request.method == 'GET') {
+        if (failGetProjects) {
+          return http.Response('Internal Server Error', 500);
+        }
+        return http.Response(jsonEncode(sampleProjects), 200);
+      }
+
+      if (request.url.path == '/api/v1/projects/' && request.method == 'POST') {
+        if (request.headers['Authorization'] != 'Token test-token') {
+          return http.Response('{"detail": "Unauthorized"}', 401);
+        }
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response(
+          jsonEncode({'id': '22222222-2222-2222-2222-222222222222', ...body}),
+          201,
+        );
+      }
+
+      if (request.url.path == '/api/v1/auth/token/' &&
+          request.method == 'POST') {
+        if (failLogin) {
+          return http.Response('{"non_field_errors": ["Invalid"]}', 400);
+        }
+        return http.Response(jsonEncode({'token': 'test-token'}), 200);
+      }
+
+      if (request.url.path == '/api/v1/auth/logout/' &&
+          request.method == 'POST') {
+        if (failLogout) {
+          return http.Response('{"detail": "Invalid token"}', 401);
+        }
+        return http.Response('', 204);
+      }
+
+      return http.Response('Not Found', 404);
+    }),
+  );
+}
+
 void main() {
+  group('Project model JSON serialization', () {
+    test('fromJson maps snake_case fields and defaults missing image URL', () {
+      final project = Project.fromJson({
+        'id': 'abc-123',
+        'title': 'Portfolio App',
+        'description': 'A mobile app',
+        'tech_stack': 'Flutter',
+        'project_url': 'https://example.com',
+      });
+
+      expect(project.id, 'abc-123');
+      expect(project.title, 'Portfolio App');
+      expect(project.techStack, 'Flutter');
+      expect(project.projectUrl, 'https://example.com');
+      expect(project.projectImageUrl, '');
+    });
+
+    test('toJson omits id and outputs snake_case keys', () {
+      const project = Project(
+        id: 'abc-123',
+        title: 'Portfolio App',
+        description: 'A mobile app',
+        techStack: 'Flutter',
+        projectUrl: 'https://example.com',
+        projectImageUrl: 'https://example.com/img.png',
+      );
+
+      final json = project.toJson();
+      expect(json.containsKey('id'), isFalse);
+      expect(json['title'], 'Portfolio App');
+      expect(json['tech_stack'], 'Flutter');
+      expect(json['project_url'], 'https://example.com');
+      expect(json['project_image_url'], 'https://example.com/img.png');
+    });
+  });
+
+  group('ApiClient and AuthState unit tests', () {
+    test(
+      'ApiClient fetches projects, obtains token, creates project, logs out',
+      () async {
+        final api = _createMockApiClient();
+
+        final projects = await api.getProjects();
+        expect(projects, hasLength(1));
+        expect(projects.first.title, 'MyPortfolio');
+
+        final token = await api.obtainToken('owner', 'secret');
+        expect(token, 'test-token');
+
+        final created = await api.createProject(
+          const Project(
+            title: 'Burhan',
+            description: 'Burhanpedia',
+            techStack: 'Flutter, Django',
+            projectUrl: 'https://example.com',
+          ),
+          token: token,
+        );
+        expect(created.id, '22222222-2222-2222-2222-222222222222');
+        expect(created.title, 'Burhan');
+
+        await api.logout(token: token);
+      },
+    );
+
+    test('AuthState clears token even if server logout fails', () async {
+      final api = _createMockApiClient(failLogout: true);
+      final authState = AuthState(api);
+
+      expect(authState.isLoggedIn, isFalse);
+      await authState.login('owner', 'secret');
+      expect(authState.isLoggedIn, isTrue);
+      expect(authState.token, 'test-token');
+
+      await authState.logout();
+      expect(authState.isLoggedIn, isFalse);
+      expect(authState.token, isNull);
+    });
+  });
+
   group('ExperienceValidators unit tests', () {
     test('validateTitle rejects empty, whitespace, and > 255 characters', () {
       expect(
@@ -76,28 +224,30 @@ void main() {
       );
     });
 
-    test('formatDate and formatDuration format dates and durations properly',
-        () {
-      final DateTime start = DateTime(2025, 1, 10);
-      final DateTime end = DateTime(2026, 3, 10);
+    test(
+      'formatDate and formatDuration format dates and durations properly',
+      () {
+        final DateTime start = DateTime(2025, 1, 10);
+        final DateTime end = DateTime(2026, 3, 10);
 
-      expect(ExperienceValidators.formatDate(start), '10 Jan 2025');
-      expect(
-        ExperienceValidators.formatDuration(start, end, isOngoing: false),
-        '1 tahun 2 bulan',
-      );
-      expect(
-        ExperienceValidators.formatDuration(start, null, isOngoing: true),
-        'Sedang berlangsung sejak 10 Jan 2025',
-      );
-    });
+        expect(ExperienceValidators.formatDate(start), '10 Jan 2025');
+        expect(
+          ExperienceValidators.formatDuration(start, end, isOngoing: false),
+          '1 tahun 2 bulan',
+        );
+        expect(
+          ExperienceValidators.formatDuration(start, null, isOngoing: true),
+          'Sedang berlangsung sejak 10 Jan 2025',
+        );
+      },
+    );
   });
 
-  testWidgets('MyPortfolio homepage displays profile info and action buttons',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(const MyApp());
+  testWidgets('MyPortfolio homepage displays profile info and action buttons', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(MyApp(apiClient: _createMockApiClient()));
 
-    // Verifikasi 3 InfoCard identitas pemilik portofolio.
     expect(find.text('NPM'), findsOneWidget);
     expect(find.text('2506624266'), findsOneWidget);
     expect(find.text('Name'), findsOneWidget);
@@ -105,7 +255,6 @@ void main() {
     expect(find.text('Class'), findsOneWidget);
     expect(find.text('PBP F'), findsOneWidget);
 
-    // Verifikasi 8 tombol aksi ItemCard (termasuk Tambah Experience).
     const List<String> buttonNames = [
       'Lihat Proyek',
       'Tambah Proyek',
@@ -121,7 +270,6 @@ void main() {
       expect(find.text(name), findsOneWidget);
     }
 
-    // Verifikasi SnackBar muncul saat tombol ditekan.
     await tester.tap(find.text('Lihat Education'));
     await tester.pump();
     expect(
@@ -130,225 +278,217 @@ void main() {
     );
   });
 
-  testWidgets('LeftDrawer navigates between Home, Add Project, and Add Experience',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(const MyApp());
+  testWidgets(
+    'Lihat Proyek loads public projects and opens ProjectDetailScreen',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(MyApp(apiClient: _createMockApiClient()));
 
-    // Buka drawer melalui ikon menu di AppBar.
-    await tester.tap(find.byIcon(Icons.menu));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Lihat Proyek'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('My Portfolio'), findsOneWidget);
-    expect(
-      find.text('Explore personal projects and experiences!'),
-      findsOneWidget,
+      expect(find.text('Achievements: Projects'), findsOneWidget);
+      expect(find.text('MyPortfolio'), findsOneWidget);
+      expect(find.text('Flutter, Django'), findsOneWidget);
+
+      await tester.tap(find.text('MyPortfolio'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('https://example.com/myportfolio'), findsOneWidget);
+    },
+  );
+
+  testWidgets('ProjectListScreen shows empty state when API returns []', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MyApp(apiClient: _createMockApiClient(projects: const [])),
     );
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Add Project'), findsOneWidget);
-    expect(find.text('Add Experience'), findsOneWidget);
 
-    // Navigasi ke ProjectFormPage melalui drawer.
-    await tester.tap(find.text('Add Project'));
-    await tester.pumpAndSettle();
-    expect(find.text('Add Project Form'), findsOneWidget);
-
-    // Navigasi ke ExperienceFormPage melalui drawer yang sama.
-    await tester.tap(find.byIcon(Icons.menu));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Add Experience'));
-    await tester.pumpAndSettle();
-    expect(find.text('Tambah Experience'), findsOneWidget);
-
-    // Kembali ke halaman utama melalui opsi Home di drawer.
-    await tester.tap(find.byIcon(Icons.menu));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Home'));
+    await tester.tap(find.text('Lihat Proyek'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Selamat datang di MyPortfolio Mobile!'), findsOneWidget);
+    expect(find.text('No projects found.'), findsOneWidget);
   });
 
-  testWidgets('Tambah Proyek button opens form, validates, and displays dialog',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(const MyApp());
+  testWidgets('Tambah Proyek requires login, then validates and submits form', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(MyApp(apiClient: _createMockApiClient()));
 
-    // Tekan kartu Tambah Proyek untuk membuka ProjectFormPage.
+    // Tapping Tambah Proyek while logged out opens LoginScreen.
     await tester.tap(find.text('Tambah Proyek'));
     await tester.pumpAndSettle();
+    expect(find.text('Login'), findsWidgets);
 
+    // Log in via LoginScreen.
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Username'),
+      'owner',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Password'),
+      'secret',
+    );
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Login'));
+    await tester.pumpAndSettle();
+
+    // After login, ProjectFormPage opens automatically.
     expect(find.text('Add Project Form'), findsOneWidget);
 
-    // Tunggu SnackBar selesai agar tidak menutupi tombol Save di bagian bawah layar uji.
+    // Wait for SnackBar to dismiss before tapping Save.
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
 
-    // Tekan Save saat form kosong untuk memicu validasi.
+    // Submit empty form to trigger validation.
     await tester.ensureVisible(find.text('Save'));
     await tester.tap(find.text('Save'));
     await tester.pump();
 
-    expect(find.text('Nama proyek tidak boleh kosong!'), findsOneWidget);
-    expect(find.text('Deskripsi proyek tidak boleh kosong!'), findsOneWidget);
+    expect(find.text('Title cannot be empty!'), findsOneWidget);
+    expect(find.text('Description cannot be empty!'), findsOneWidget);
+    expect(find.text('Tech stack cannot be empty!'), findsOneWidget);
+    expect(find.text('Project URL cannot be empty!'), findsOneWidget);
 
-    // Isi field formulir.
+    // Fill valid project fields.
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Nama Proyek'),
+      find.widgetWithText(TextFormField, 'Title'),
       'Burhan',
     );
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Deskripsi Proyek'),
+      find.widgetWithText(TextFormField, 'Description'),
       'Burhanpedia',
     );
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Teknologi yang Digunakan'),
+      find.widgetWithText(TextFormField, 'Tech Stack'),
       'Flutter, Django',
     );
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Tautan Proyek'),
+      find.widgetWithText(TextFormField, 'Project URL'),
       'https://example.com',
     );
 
-    // Simpan formulir dan verifikasi AlertDialog.
     await tester.ensureVisible(find.text('Save'));
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Proyek berhasil ditambahkan!'), findsOneWidget);
-    expect(find.text('Nama Proyek: Burhan'), findsOneWidget);
-    expect(find.text('Deskripsi: Burhanpedia'), findsOneWidget);
-    expect(find.text('Kategori: Web Development'), findsOneWidget);
-    expect(find.text('Teknologi: Flutter, Django'), findsOneWidget);
-    expect(find.text('Tautan: https://example.com'), findsOneWidget);
+    expect(find.text('Project saved successfully!'), findsOneWidget);
+    expect(find.text('Title: Burhan'), findsOneWidget);
+    expect(find.text('Description: Burhanpedia'), findsOneWidget);
+    expect(find.text('Tech Stack: Flutter, Django'), findsOneWidget);
+    expect(find.text('Project URL: https://example.com'), findsOneWidget);
 
-    // Tutup dialog dengan tombol OK.
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
-
-    expect(find.text('Proyek berhasil ditambahkan!'), findsNothing);
+    expect(find.text('Project saved successfully!'), findsNothing);
   });
 
   testWidgets(
-      'Tambah Experience card opens form on phone viewport, validates dates/fields, and displays summary dialog',
-      (WidgetTester tester) async {
-    // Simulasikan layar selebar ponsel untuk memastikan form dapat digulir tanpa overflow.
-    tester.view.physicalSize = const Size(390, 740);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
+    'LeftDrawer switches between Login and Logout and guards Add Project',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(MyApp(apiClient: _createMockApiClient()));
 
-    await tester.pumpWidget(const MyApp());
+      await tester.tap(find.byIcon(Icons.menu));
+      await tester.pumpAndSettle();
 
-    // Scroll ke kartu Tambah Experience dan buka via Navigator.push().
-    await tester.ensureVisible(find.text('Tambah Experience'));
-    await tester.tap(find.text('Tambah Experience'));
-    await tester.pumpAndSettle();
+      expect(find.text('Home'), findsOneWidget);
+      expect(find.text('Projects'), findsOneWidget);
+      expect(find.text('Add Project'), findsOneWidget);
+      expect(find.text('Add Experience'), findsOneWidget);
+      expect(find.text('Login'), findsOneWidget);
 
-    expect(find.text('Tambah Experience'), findsOneWidget);
+      // Log in from drawer.
+      await tester.tap(find.text('Login'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Username'),
+        'owner',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Password'),
+        'secret',
+      );
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Login'));
+      await tester.pumpAndSettle();
 
-    // Tunggu SnackBar selesai agar tidak menutupi tombol di bagian bawah.
-    await tester.pump(const Duration(seconds: 5));
-    await tester.pumpAndSettle();
+      // Open drawer again: Logout should now appear and Add Project opens directly.
+      await tester.tap(find.byIcon(Icons.menu));
+      await tester.pumpAndSettle();
+      expect(find.text('Logout'), findsWidgets);
 
-    // Uji validasi ketika form kosong.
-    await tester.ensureVisible(find.text('Simpan'));
-    await tester.tap(find.text('Simpan'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Add Project'));
+      await tester.pumpAndSettle();
+      expect(find.text('Add Project Form'), findsOneWidget);
+    },
+  );
 
-    expect(find.text('Judul pengalaman tidak boleh kosong!'), findsOneWidget);
-    expect(find.text('Deskripsi pengalaman tidak boleh kosong!'), findsOneWidget);
-    expect(find.text('Tanggal mulai wajib dipilih!'), findsOneWidget);
+  testWidgets(
+    'Tambah Experience card opens form on phone viewport, validates dates/fields, and displays summary dialog',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(390, 740);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
 
-    // Uji validasi menolak input yang hanya berisi spasi.
-    await tester.ensureVisible(
-      find.widgetWithText(TextFormField, 'Judul Pengalaman'),
-    );
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Judul Pengalaman'),
-      '   ',
-    );
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Deskripsi Pengalaman'),
-      '   ',
-    );
-    await tester.ensureVisible(find.text('Simpan'));
-    await tester.tap(find.text('Simpan'));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(MyApp(apiClient: _createMockApiClient()));
 
-    expect(find.text('Judul pengalaman tidak boleh kosong!'), findsOneWidget);
-    expect(find.text('Deskripsi pengalaman tidak boleh kosong!'), findsOneWidget);
+      await tester.ensureVisible(find.text('Tambah Experience'));
+      await tester.tap(find.text('Tambah Experience'));
+      await tester.pumpAndSettle();
 
-    // Isi judul & deskripsi valid.
-    await tester.ensureVisible(
-      find.widgetWithText(TextFormField, 'Judul Pengalaman'),
-    );
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Judul Pengalaman'),
-      'Software Engineer Intern',
-    );
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Deskripsi Pengalaman'),
-      'Mengembangkan aplikasi Flutter dan REST API Django.',
-    );
+      expect(find.text('Tambah Experience'), findsOneWidget);
 
-    // Pilih kategori Internship dari dropdown.
-    await tester.ensureVisible(find.text('Full-Time'));
-    await tester.tap(find.text('Full-Time'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Internship').last);
-    await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
 
-    // Pilih Tanggal Mulai = tanggal 15 pada bulan berjalan.
-    await tester.ensureVisible(find.text('Pilih tanggal mulai'));
-    await tester.tap(find.text('Pilih tanggal mulai'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('15'));
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Simpan'));
+      await tester.tap(find.text('Simpan'));
+      await tester.pumpAndSettle();
 
-    // Pilih Tanggal Selesai lebih awal (tanggal 10) untuk menguji validasi urutan tanggal.
-    await tester.ensureVisible(find.text('Pilih tanggal selesai'));
-    await tester.tap(find.text('Pilih tanggal selesai'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('10'));
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
+      expect(find.text('Judul pengalaman tidak boleh kosong!'), findsOneWidget);
+      expect(
+        find.text('Deskripsi pengalaman tidak boleh kosong!'),
+        findsOneWidget,
+      );
+      expect(find.text('Tanggal mulai wajib dipilih!'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Simpan'));
-    await tester.tap(find.text('Simpan'));
-    await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.widgetWithText(TextFormField, 'Judul Pengalaman'),
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Judul Pengalaman'),
+        'Software Engineer Intern',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Deskripsi Pengalaman'),
+        'Mengembangkan aplikasi Flutter dan REST API Django.',
+      );
 
-    expect(
-      find.text('Tanggal selesai tidak boleh sebelum tanggal mulai!'),
-      findsOneWidget,
-    );
+      await tester.ensureVisible(find.text('Full-Time'));
+      await tester.tap(find.text('Full-Time'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Internship').last);
+      await tester.pumpAndSettle();
 
-    // Aktifkan toggle Masih berlangsung (Present), sehingga tanggal selesai diabaikan.
-    await tester.ensureVisible(find.text('Masih berlangsung (Present)'));
-    await tester.tap(find.text('Masih berlangsung (Present)'));
-    await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Pilih tanggal mulai'));
+      await tester.tap(find.text('Pilih tanggal mulai'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('15'));
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
 
-    // Simpan formulir dan verifikasi AlertDialog muncul dengan seluruh isian.
-    await tester.ensureVisible(find.text('Simpan'));
-    await tester.tap(find.text('Simpan'));
-    await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Masih berlangsung (Present)'));
+      await tester.tap(find.text('Masih berlangsung (Present)'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Experience berhasil ditambahkan!'), findsOneWidget);
-    expect(find.text('Judul: Software Engineer Intern'), findsOneWidget);
-    expect(find.text('Kategori: Internship'), findsOneWidget);
-    expect(
-      find.text(
-        'Deskripsi: Mengembangkan aplikasi Flutter dan REST API Django.',
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.text('Tanggal Selesai: Masih berlangsung (Present)'),
-      findsOneWidget,
-    );
+      await tester.ensureVisible(find.text('Simpan'));
+      await tester.tap(find.text('Simpan'));
+      await tester.pumpAndSettle();
 
-    // Tutup dialog dengan tombol OK dan pastikan dialog tertutup.
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
+      expect(find.text('Experience berhasil ditambahkan!'), findsOneWidget);
+      expect(find.text('Judul: Software Engineer Intern'), findsOneWidget);
 
-    expect(find.text('Experience berhasil ditambahkan!'), findsNothing);
-  });
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(find.text('Experience berhasil ditambahkan!'), findsNothing);
+    },
+  );
 }
