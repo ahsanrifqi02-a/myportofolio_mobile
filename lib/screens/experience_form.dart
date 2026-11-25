@@ -168,10 +168,7 @@ class _ExperienceFormPageState extends State<ExperienceFormPage> {
       appBar: AppBar(
         title: const Text(
           'Tambah Experience',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         backgroundColor: primaryColor,
         foregroundColor: Colors.white,
@@ -314,10 +311,10 @@ class _ExperienceFormPageState extends State<ExperienceFormPage> {
                   initialValue: _endedAt,
                   validator: (DateTime? value) =>
                       ExperienceValidators.validateEndDate(
-                    value,
-                    startDate: _startedAt,
-                    isOngoing: _isOngoing,
-                  ),
+                        value,
+                        startDate: _startedAt,
+                        isOngoing: _isOngoing,
+                      ),
                   builder: (FormFieldState<DateTime> field) {
                     return InkWell(
                       onTap: _isOngoing ? null : _pickEndDate,
@@ -348,8 +345,8 @@ class _ExperienceFormPageState extends State<ExperienceFormPage> {
                           _isOngoing
                               ? 'Masih berlangsung (Present)'
                               : (_endedAt != null
-                                  ? ExperienceValidators.formatDate(_endedAt!)
-                                  : 'Pilih tanggal selesai'),
+                                    ? ExperienceValidators.formatDate(_endedAt!)
+                                    : 'Pilih tanggal selesai'),
                           style: TextStyle(
                             color: (!_isOngoing && _endedAt != null)
                                 ? null

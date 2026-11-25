@@ -81,7 +81,8 @@ class ExperienceValidators {
     if (isOngoing || endDate == null) {
       return null;
     }
-    if (startDate != null && _dateOnly(endDate).isBefore(_dateOnly(startDate))) {
+    if (startDate != null &&
+        _dateOnly(endDate).isBefore(_dateOnly(startDate))) {
       return 'Tanggal selesai tidak boleh sebelum tanggal mulai!';
     }
     return null;
@@ -109,7 +110,8 @@ class ExperienceValidators {
 
     final DateTime start = _dateOnly(startDate);
     final DateTime end = _dateOnly(endDate);
-    final int totalMonths = (end.year - start.year) * 12 + (end.month - start.month);
+    final int totalMonths =
+        (end.year - start.year) * 12 + (end.month - start.month);
 
     if (totalMonths <= 0) {
       final int days = end.difference(start).inDays;
